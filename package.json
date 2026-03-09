@@ -1,0 +1,12 @@
+{
+  "name": "qos-dashboard",
+  "version": "1.0.0",
+  "description": "Quantum Operating System Dashboard",
+  "scripts": {
+    "dev": "concurrently \"source .venv/bin/activate && uvicorn dashboard.app:app --host 0.0.0.0 --port 8080 --reload\" \"sleep 2 && open http://localhost:8080\"",
+    "start": "npm run dev"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

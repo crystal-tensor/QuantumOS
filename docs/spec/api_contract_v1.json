@@ -1,0 +1,105 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "QuantumOS API Contract v1.0",
+  "description": "Communication contract between Python SDK (Client) and Rust Kernel (Server).",
+  "type": "object",
+  "definitions": {
+    "qisa_instruction": {
+      "type": "object",
+      "required": ["opcode", "operands"],
+      "properties": {
+        "opcode": {
+          "type": "string",
+          "enum": ["QALLOC", "QFREE", "U3", "CX", "MEASURE", "WAIT"]
+        },
+        "operands": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              { "type": "integer", "minimum": 0 },
+              { "type": "number" }
+            ]
+          }
+        },
+        "target_qubits": {
+          "type": "array",
+          "description": "Explicit list of physical qubits affected (for scheduler dependency tracking)",
+          "items": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "JobRequest": {
+      "type": "object",
+      "required": ["job_id", "tenant_id", "required_qubits", "expected_duration_ns", "qisa_instructions"],
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Unique identifier for the job."
+        },
+        "tenant_id": {
+          "type": "string",
+          "description": "Identifier for the user or organization."
+        },
+        "required_qubits": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of physical qubits required."
+        },
+        "expected_duration_ns": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Estimated execution time in nanoseconds."
+        },
+        "priority": {
+          "type": "integer",
+          "default": 0,
+          "description": "Job priority (higher value = higher priority)."
+        },
+        "qisa_instructions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/qisa_instruction"
+          }
+        }
+      }
+    },
+    "JobResponse": {
+      "type": "object",
+      "required": ["job_id", "status", "results"],
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["PENDING", "RUNNING", "COMPLETED", "FAILED", "CANCELLED"]
+        },
+        "error_message": {
+          "type": "string",
+          "description": "Error details if status is FAILED."
+        },
+        "results": {
+          "type": "object",
+          "description": "Measurement results (e.g., counts or probabilities).",
+          "additionalProperties": {
+            "type": "number"
+          }
+        },
+        "execution_time_ns": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/definitions/JobRequest"
+    },
+    {
+      "$ref": "#/definitions/JobResponse"
+    }
+  ]
+}

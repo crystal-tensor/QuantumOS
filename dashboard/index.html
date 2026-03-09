@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>QOS Visualization Dashboard</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; background-color: #f0f0f0; }
+        .container { display: flex; gap: 20px; margin-bottom: 30px; }
+        .panel { flex: 1; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .log-area { height: 300px; overflow-y: scroll; background: #333; color: #0f0; padding: 10px; font-family: monospace; white-space: pre-wrap; font-size: 12px; }
+        h2 { margin-top: 0; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        .status { font-weight: bold; margin-bottom: 10px; }
+        .running { color: green; }
+        .stopped { color: red; }
+        button { padding: 8px 16px; margin-right: 5px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
+        button:hover { background: #0056b3; }
+        
+        /* Patent Section Styles */
+        .patent-section { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 30px; }
+        .patent-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: transform 0.2s; }
+        .patent-card:hover { transform: translateY(-5px); }
+        .patent-title { font-size: 1.2em; font-weight: bold; color: #333; margin-bottom: 10px; height: 50px; }
+        .patent-desc { font-size: 0.9em; color: #666; margin-bottom: 15px; min-height: 60px; }
+        .patent-viz { height: 150px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px; position: relative; overflow: hidden; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; }
+        .tech-effect { background: #e8f5e9; padding: 10px; border-radius: 4px; font-size: 0.85em; color: #2e7d32; border-left: 4px solid #2e7d32; }
+        
+        /* Patent 1 Viz: Priority Queue */
+        .queue-viz { display: flex; flex-direction: column; gap: 5px; width: 80%; }
+        .queue-item { height: 20px; border-radius: 3px; display: flex; align-items: center; padding: 0 5px; font-size: 10px; color: white; animation: slideIn 0.5s ease-out; }
+        .p-high { background: #ff4444; width: 90%; }
+        .p-med { background: #ffbb33; width: 70%; }
+        .p-low { background: #00C851; width: 50%; }
+        @keyframes slideIn { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+        /* Patent 2 Viz: Decay Curve */
+        canvas { width: 100%; height: 100%; }
+
+        /* Patent 3 Viz: Code Transform */
+        .code-block { font-family: monospace; font-size: 10px; background: #2b2b2b; color: #a9b7c6; padding: 5px; border-radius: 3px; width: 45%; height: 90%; overflow: hidden; }
+        .transform-arrow { font-size: 20px; color: #555; }
+
+        /* Workflow Animation Styles */
+        .workflow-container { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); position: relative; overflow: hidden; }
+        .workflow-box { width: 180px; height: 140px; border: 2px solid #333; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #f9f9f9; z-index: 2; transition: all 0.3s; }
+        .box-title { font-weight: bold; margin-bottom: 10px; color: #007bff; }
+        .box-content { font-size: 0.8em; text-align: center; color: #555; width: 100%; }
+        .mini-component { background: #eee; border: 1px solid #ddd; padding: 4px 8px; margin: 4px auto; border-radius: 3px; font-size: 0.75em; width: 80%; transition: all 0.3s; }
+        
+        .arrow-path { flex: 1; height: 4px; background: #e0e0e0; position: relative; margin: 0 20px; border-radius: 2px; }
+        .packet { width: 16px; height: 16px; background: #ff9800; border-radius: 50%; position: absolute; top: -6px; left: 0; opacity: 0; box-shadow: 0 0 5px rgba(255, 152, 0, 0.5); }
+        
+        .active-box { border-color: #ff9800; background: #fff3e0; transform: scale(1.05); box-shadow: 0 0 15px rgba(255, 152, 0, 0.3); }
+        .active-mini { background: #ffcc80; border-color: #ff9800; color: #e65100; font-weight: bold; }
+        
+        .status-text { position: absolute; bottom: 10px; left: 0; width: 100%; text-align: center; font-style: italic; color: #666; font-size: 0.9em; }
+    </style>
+
+</head>
+<body>
+    <h1>QOS End-to-End Visualization</h1>
+    
+    <div style="margin-bottom: 20px;">
+        <button onclick="startKernel()">Start Rust Kernel (Port 3000)</button>
+        <button onclick="startSim()">Start Python Sim (Port 8001)</button>
+        <button onclick="runSDK()">Run SDK Example</button>
+        <button onclick="stopAll()" style="background-color: #ffcccc;">Stop All Services</button>
+    </div>
+
+    <div class="container">
+        <div class="panel">
+            <h2>Rust Kernel</h2>
+            <div class="status" id="status-kernel">Status: Checking...</div>
+            <div class="log-area" id="logs-kernel"></div>
+        </div>
+        <div class="panel">
+            <h2>Python Simulator</h2>
+            <div class="status" id="status-sim">Status: Checking...</div>
+            <div class="log-area" id="logs-sim"></div>
+        </div>
+        <div class="panel">
+            <h2>Python SDK Client</h2>
+            <div class="status" id="status-sdk">Status: Idle</div>
+            <div class="log-area" id="logs-sdk"></div>
+        </div>
+    </div>
+
+    <!-- Patent Showcase Section -->
+    <h2 style="border-bottom: 2px solid #333; margin-top: 40px;">Core Technologies & Patents Showcase</h2>
+    <div class="patent-section">
+        <!-- Patent 1 -->
+        <div class="patent-card">
+            <div class="patent-title">Patent 1: Priority-based Hybrid Task Scheduling</div>
+            <div class="patent-desc">
+                Implements a Rust-based binary heap scheduler that dynamically reorders quantum tasks. Ensures critical system calibration jobs preempt routine calculations.
+            </div>
+            <div class="patent-viz" id="viz-scheduler">
+                <div class="queue-viz" id="queue-viz">
+                    <!-- JS will populate this -->
+                    <div class="queue-item p-low">Job #101 (Priority: 1)</div>
+                    <div class="queue-item p-med">Job #102 (Priority: 5)</div>
+                </div>
+            </div>
+            <div class="tech-effect">
+                <strong>Effect:</strong> 100x responsiveness improvement for critical tasks; zero-blocking high-throughput concurrency.
+            </div>
+        </div>
+
+        <!-- Patent 2 -->
+        <div class="patent-card">
+            <div class="patent-title">Patent 2: Time-Dependent Density Matrix Noise Simulation</div>
+            <div class="patent-desc">
+                Simulates real-time T1/T2 decay during instruction execution gaps. Uses density matrices to capture mixed states unlike state-vector simulators.
+            </div>
+            <div class="patent-viz" id="viz-simulator">
+                <canvas id="noiseCanvas"></canvas>
+            </div>
+            <div class="tech-effect">
+                <strong>Effect:</strong> High-fidelity noise modeling that reflects actual hardware decoherence over time.
+            </div>
+        </div>
+
+        <!-- Patent 3 -->
+        <div class="patent-card">
+            <div class="patent-title">Patent 3: QISA to QIR Dynamic Compilation</div>
+            <div class="patent-desc">
+                Translates vendor-specific Quantum Instruction Set Architecture (QISA) into LLVM-based Quantum Intermediate Representation (QIR).
+            </div>
+            <div class="patent-viz" style="flex-direction: row; justify-content: space-around;">
+                <div class="code-block" id="code-qisa">
+                    U3 1.57 0 3.14 q[0]<br>
+                    CX q[0], q[1]<br>
+                    MEASURE q[1]
+                </div>
+                <div class="transform-arrow">➜</div>
+                <div class="code-block" id="code-llvm" style="color: #a5d6ff;">
+                    %1 = call %Qubit* @get_qubit(0)<br>
+                    call void @u3(1.57, ..., %1)<br>
+                    ...
+                </div>
+            </div>
+            <div class="tech-effect">
+                <strong>Effect:</strong> Write once, run on any backend; leverages classical compiler optimizations for quantum code.
+            </div>
+        </div>
+    </div>
+
+    <!-- System Architecture & Workflow Animation -->
+    <h2 style="border-bottom: 2px solid #333; margin-top: 40px;">System Architecture & Workflow</h2>
+    
+    <!-- Backend Selection Control -->
+    <div style="margin-bottom: 20px; padding: 15px; background: #e8f5e9; border-radius: 8px; border: 1px solid #c8e6c9; display: flex; align-items: center; justify-content: space-between;">
+        <div style="font-weight: bold; color: #2e7d32;">
+            <span style="font-size: 1.2em;">🔧 Backend Selection:</span>
+            <span style="font-weight: normal; margin-left: 10px; color: #555;">Choose the execution path for the quantum job.</span>
+        </div>
+        <div style="display: flex; gap: 20px;">
+            <label style="cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: white; border-radius: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                <input type="radio" name="backend-select" value="real" checked onchange="updateArchPath()">
+                <span style="font-weight: bold; color: #d32f2f;">Real Quantum Processor (Default)</span>
+            </label>
+            <label style="cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: white; border-radius: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                <input type="radio" name="backend-select" value="sim" onchange="updateArchPath()">
+                <span style="font-weight: bold; color: #1976d2;">Quantum Simulator</span>
+            </label>
+        </div>
+    </div>
+
+    <style>
+        .arch-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            position: relative;
+            margin-top: 20px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .arch-layer {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background: #f8f9fa;
+            position: relative;
+        }
+        .layer-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+            width: 100%;
+            text-align: center;
+            background: #e9ecef;
+            padding: 5px 0;
+            border-radius: 3px;
+        }
+        .layer-nodes {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            gap: 10px;
+        }
+        .arch-node {
+            padding: 8px 12px;
+            border-radius: 4px;
+            background: white;
+            border: 1px solid #ccc;
+            font-size: 0.85em;
+            text-align: center;
+            min-width: 80px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: all 0.3s;
+            position: relative;
+        }
+        .arch-node.active {
+            transform: scale(1.1);
+            box-shadow: 0 0 10px rgba(33, 150, 243, 0.5);
+            border-color: #2196F3;
+            background: #e3f2fd;
+            color: #1565c0;
+            font-weight: bold;
+        }
+        .flow-status-text {
+            text-align: center;
+            font-style: italic;
+            color: #666;
+            margin-top: 10px;
+            height: 20px;
+        }
+        
+        /* Specific Node Colors */
+        .node-sdk { border-top: 3px solid #2196F3; }
+        .node-kernel { border-top: 3px solid #4CAF50; }
+        .node-hal { border-top: 3px solid #FF9800; }
+        .node-hw { border-top: 3px solid #9C27B0; }
+        
+        /* SVG Connections */
+        #arch-connections {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 5; /* Above layers background */
+            pointer-events: none;
+        }
+        .connection-path {
+            fill: none;
+            stroke: #ccc;
+            stroke-width: 3;
+            stroke-linecap: round;
+            transition: stroke 0.3s;
+            opacity: 0.6;
+        }
+        .connection-path.active-flow {
+            stroke: #2196F3;
+            stroke-width: 5;
+            stroke-dasharray: 12;
+            opacity: 1;
+            animation: flowAnimation 0.8s linear infinite;
+        }
+        @keyframes flowAnimation {
+            from { stroke-dashoffset: 24; }
+            to { stroke-dashoffset: 0; }
+        }
+
+        .arch-layer {
+            display: flex;
+            flex-direction: row;
+            align-items: stretch;
+            padding: 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background: #f8f9fa;
+            /* Removed position: relative to allow nodes to pop out of stacking context */
+            min-height: 100px;
+        }
+
+        .layer-title {
+            width: 150px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            text-align: center;
+            padding: 10px;
+            border-right: 1px solid rgba(0,0,0,0.1);
+            margin-bottom: 0;
+            font-size: 0.9em;
+        }
+
+        .layer-nodes {
+            flex-grow: 1;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding: 20px;
+            gap: 10px;
+        }
+
+        .arch-node {
+            padding: 8px 12px;
+            border-radius: 4px;
+            background: white;
+            border: 1px solid #ccc;
+            font-size: 0.85em;
+            text-align: center;
+            min-width: 80px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: all 0.3s;
+            position: relative;
+            z-index: 10; /* Above SVG lines */
+        }
+    </style>
+
+    <div class="arch-container" id="arch-diagram">
+        <svg id="arch-connections"></svg>
+
+        <!-- Layer 1: Application -->
+        <div class="arch-layer" style="border-color: #bbdefb;">
+            <div class="layer-title" style="background: #e3f2fd; color: #0d47a1;">Application Layer</div>
+            <div class="layer-nodes">
+                <div class="arch-node node-sdk" id="node-sdk">Python SDK</div>
+                <div class="arch-node node-sdk" id="node-compiler">Compiler</div>
+                <div class="arch-node node-sdk" id="node-qir">QIR Binary</div>
+                <div class="arch-node node-sdk" id="node-dashboard">Dashboard</div>
+            </div>
+        </div>
+
+        <!-- Layer 2: Kernel -->
+        <div class="arch-layer" style="border-color: #c8e6c9;">
+            <div class="layer-title" style="background: #e8f5e9; color: #1b5e20;">QuantumOS Kernel</div>
+            <div class="layer-nodes">
+                <div class="arch-node node-kernel" id="node-api">API Service</div>
+                <div class="arch-node node-kernel" id="node-scheduler">Scheduler</div>
+                <div class="arch-node node-kernel" id="node-resource">Resource Mgr</div>
+                <div class="arch-node node-kernel" id="node-qec">QEC Module</div>
+                <div class="arch-node node-kernel" id="node-hal-int">HAL Interface</div>
+            </div>
+        </div>
+
+        <!-- Layer 3: HAL -->
+        <div class="arch-layer" style="border-color: #ffe0b2;">
+            <div class="layer-title" style="background: #fff3e0; color: #e65100;">Hardware Abstraction Layer</div>
+            <div class="layer-nodes">
+                <div class="arch-node node-hal" id="node-iqhal">IQHalDriver</div>
+                <div class="arch-node node-hal" id="node-sim-driver">Simulator Driver</div>
+            </div>
+        </div>
+
+        <!-- Layer 4: Hardware -->
+        <div class="arch-layer" style="border-color: #e1bee7;">
+            <div class="layer-title" style="background: #f3e5f5; color: #4a148c;">Physical / Virtual Hardware</div>
+            <div class="layer-nodes">
+                <div class="arch-node node-hw" id="node-sim">Quantum Simulator</div>
+                <div class="arch-node node-hw" id="node-real-qp">Real QPU</div>
+            </div>
+        </div>
+        
+        <div class="flow-status-text" id="arch-status">System Idle</div>
+    </div>
+
+    <!-- Architecture Visualization Gallery -->
+    <h2 style="border-bottom: 2px solid #333; margin-top: 40px;">Architecture Comparison & Visualization</h2>
+    
+    <div style="display: flex; flex-direction: column; gap: 30px; margin-top: 20px;">
+        
+        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <h3 style="margin-top: 0; color: #0277BD;">1. 4-Qubit VQE Workflow (Superconducting)</h3>
+            <p style="color: #666; margin-bottom: 15px;">
+                Complete end-to-end visualization of the VQE algorithm for H2 molecule on a 4-qubit superconducting processor.
+                Includes: User Code (Ansatz), QIR Compilation, Topology Mapping, Surface Code QEC, and Full Hardware Pulse Sequence.
+            </p>
+            <div style="width: 100%; overflow: hidden; border: 1px solid #ddd; border-radius: 4px;">
+                <img src="vqe_workflow_full.png" style="width: 100%; display: block;" alt="VQE Workflow">
+            </div>
+        </div>
+
+        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            <h3 style="margin-top: 0; color: #2E7D32;">2. Alternative Architectures (Neutral Atom & Ion Trap)</h3>
+            <p style="color: #666; margin-bottom: 15px;">
+                Comparison of pulse sequences and gate mechanisms for Neutral Atom (Rydberg Blockade) and Ion Trap (Phonon Bus) architectures.
+            </p>
+            <div style="width: 100%; overflow: hidden; border: 1px solid #ddd; border-radius: 4px;">
+                <img src="alternatives_workflow.png" style="width: 100%; display: block;" alt="Alternative Architectures">
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const API_URL = ""; // Relative path
+
+        // Visualization Logic for Patents
+
+        // Patent 1: Priority Queue Simulation
+        function simulateQueue() {
+            const queueViz = document.getElementById('queue-viz');
+            // Randomly add a task
+            if (Math.random() > 0.6) {
+                const priority = Math.random() > 0.8 ? 'High' : (Math.random() > 0.5 ? 'Med' : 'Low');
+                const pClass = priority === 'High' ? 'p-high' : (priority === 'Med' ? 'p-med' : 'p-low');
+                const item = document.createElement('div');
+                item.className = `queue-item ${pClass}`;
+                item.innerText = `Job #${Math.floor(Math.random()*1000)} (${priority})`;
+                
+                // Insert based on priority (High at top)
+                let inserted = false;
+                const items = queueViz.children;
+                for (let i = 0; i < items.length; i++) {
+                    const currentP = items[i].className.includes('p-high') ? 3 : (items[i].className.includes('p-med') ? 2 : 1);
+                    const newP = priority === 'High' ? 3 : (priority === 'Med' ? 2 : 1);
+                    if (newP > currentP) {
+                        queueViz.insertBefore(item, items[i]);
+                        inserted = true;
+                        break;
+                    }
+                }
+                if (!inserted) queueViz.appendChild(item);
+
+                // Keep max 5 items
+                if (queueViz.children.length > 5) {
+                    queueViz.removeChild(queueViz.lastChild);
+                }
+            }
+        }
+
+        // Patent 2: Noise Decay Curve
+        let time = 0;
+        function drawNoiseCurve() {
+            const canvas = document.getElementById('noiseCanvas');
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width = canvas.parentElement.clientWidth;
+            const h = canvas.height = canvas.parentElement.clientHeight;
+            
+            ctx.clearRect(0, 0, w, h);
+            
+            // Draw axes
+            ctx.beginPath();
+            ctx.strokeStyle = '#aaa';
+            ctx.moveTo(30, 10); ctx.lineTo(30, h-20);
+            ctx.moveTo(30, h-20); ctx.lineTo(w-10, h-20);
+            ctx.stroke();
+
+            // Draw T1 curve: e^(-t/T1)
+            ctx.beginPath();
+            ctx.strokeStyle = '#2196F3';
+            ctx.lineWidth = 2;
+            const T1 = 50;
+            for (let t = 0; t < w - 40; t+=2) {
+                const y = (h - 20) - ((h - 40) * Math.exp(-t / T1));
+                if (t === 0) ctx.moveTo(30 + t, y);
+                else ctx.lineTo(30 + t, y);
+            }
+            ctx.stroke();
+
+            // Draw current time marker
+            const markerX = 30 + (time % (w - 40));
+            ctx.beginPath();
+            ctx.strokeStyle = '#F44336';
+            ctx.setLineDash([5, 5]);
+            ctx.moveTo(markerX, 10);
+            ctx.lineTo(markerX, h-20);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            // Text
+            ctx.fillStyle = '#333';
+            ctx.fillText("Fidelity (T1 Decay)", 40, 20);
+            
+            time += 2;
+        }
+        
+        // Patent 3: Code Transform Animation
+        const qisaLines = ["U3 1.57 0 3.14 q[0]", "CX q[0], q[1]", "MEASURE q[1]"];
+        const llvmLines = [
+            "%1 = call %Qubit* @get(0)", 
+            "call void @u3(1.57, ..., %1)", 
+            "call void @cnot(%1, %2)", 
+            "%res = call i1 @measure(%2)"
+        ];
+        let codeStep = 0;
+        function animateCode() {
+            const qisaEl = document.getElementById('code-qisa');
+            const llvmEl = document.getElementById('code-llvm');
+            
+            // Highlight current line simulation
+            const qIdx = Math.floor(codeStep / 2) % qisaLines.length;
+            qisaEl.innerHTML = qisaLines.map((l, i) => i === qIdx ? `<span style="color: yellow;">${l}</span>` : l).join('<br>');
+            
+            const lIdx = Math.floor(codeStep / 2) % llvmLines.length;
+            llvmEl.innerHTML = llvmLines.map((l, i) => i <= lIdx ? `<span style="color: #a5d6ff;">${l}</span>` : `<span style="opacity:0.3;">${l}</span>`).join('<br>');
+
+            codeStep++;
+        }
+
+        // System Workflow Animation
+        let archStep = 0;
+        let connectionsDrawn = false;
+        let selectedBackend = 'real'; // Default
+
+        function updateArchPath() {
+            const radios = document.getElementsByName('backend-select');
+            for(let r of radios) {
+                if(r.checked) {
+                    selectedBackend = r.value;
+                    break;
+                }
+            }
+            // Reset animation
+            archStep = 0;
+            // Redraw to ensure all lines are present (though we draw all statically now)
+            drawConnections();
+        }
+        
+        // Define connections: [source, target, id]
+        const connectionDefs = [
+            // Core Flow
+            ['node-sdk', 'node-compiler', 'link-sdk-comp'],
+            ['node-compiler', 'node-qir', 'link-comp-qir'],
+            ['node-qir', 'node-api', 'link-qir-api'],
+            ['node-api', 'node-scheduler', 'link-api-sched'],
+            ['node-scheduler', 'node-resource', 'link-sched-res'],
+            ['node-resource', 'node-qec', 'link-res-qec'],
+            ['node-qec', 'node-hal-int', 'link-qec-hal'],
+            
+            // Simulator Path
+            ['node-hal-int', 'node-sim-driver', 'link-hal-simdrv'],
+            ['node-sim-driver', 'node-sim', 'link-simdrv-sim'],
+            ['node-sim', 'node-sim-driver', 'link-sim-ret'],
+            ['node-sim-driver', 'node-hal-int', 'link-simdrv-ret'],
+            
+            // Real QPU Path (Via IQHalDriver)
+            ['node-hal-int', 'node-iqhal', 'link-hal-iqhal'],
+            ['node-iqhal', 'node-real-qp', 'link-iqhal-realqp'],
+            ['node-real-qp', 'node-iqhal', 'link-realqp-ret'],
+            ['node-iqhal', 'node-hal-int', 'link-iqhal-ret'],
+
+            // Common Return
+            ['node-hal-int', 'node-api', 'link-hal-api'],
+            ['node-api', 'node-dashboard', 'link-api-dash']
+        ];
+
+        function drawConnections() {
+            const svg = document.getElementById('arch-connections');
+            const container = document.getElementById('arch-diagram').getBoundingClientRect();
+            const busX = container.width / 2; // Central Bus Line
+            
+            svg.innerHTML = ''; // Clear existing
+            
+            connectionDefs.forEach(conn => {
+                const src = document.getElementById(conn[0]);
+                const tgt = document.getElementById(conn[1]);
+                
+                if (!src || !tgt) return;
+                
+                const srcRect = src.getBoundingClientRect();
+                const tgtRect = tgt.getBoundingClientRect();
+                
+                const srcCx = srcRect.left - container.left + srcRect.width / 2;
+                const srcCy = srcRect.top - container.top + srcRect.height / 2;
+                const tgtCx = tgtRect.left - container.left + tgtRect.width / 2;
+                const tgtCy = tgtRect.top - container.top + tgtRect.height / 2;
+                
+                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                let d = '';
+
+                // Check if Intra-layer (same Y level approx)
+                if (Math.abs(srcCy - tgtCy) < 30) {
+                    // Direct horizontal connection for same layer
+                    d = `M ${srcCx} ${srcCy} L ${tgtCx} ${tgtCy}`;
+                } else {
+                    // Inter-layer: Orthogonal Bus Routing
+                    const isDown = tgtCy > srcCy;
+                    const gap = 15; // Vertical exit distance
+                    
+                    const startY = isDown ? (srcRect.bottom - container.top) : (srcRect.top - container.top);
+                    const endY = isDown ? (tgtRect.top - container.top) : (tgtRect.bottom - container.top);
+                    
+                    const exitY = isDown ? startY + gap : startY - gap;
+                    const entryY = isDown ? endY - gap : endY + gap;
+                    
+                    d = `M ${srcCx} ${startY} 
+                         L ${srcCx} ${exitY} 
+                         L ${busX} ${exitY} 
+                         L ${busX} ${entryY} 
+                         L ${tgtCx} ${entryY} 
+                         L ${tgtCx} ${endY}`;
+                }
+                
+                path.setAttribute("d", d);
+                path.setAttribute("id", conn[2]);
+                path.setAttribute("class", "connection-path");
+                svg.appendChild(path);
+            });
+            
+            connectionsDrawn = true;
+        }
+
+        // Draw connections initially and on resize
+        window.addEventListener('resize', drawConnections);
+        // Initial draw after a short delay to ensure layout is settled
+        setTimeout(drawConnections, 500);
+
+        function animateArchitecture() {
+            if (!connectionsDrawn) drawConnections();
+
+            // Common Steps (Start)
+            const commonStepsStart = [
+                { id: 'node-sdk', link: 'link-sdk-comp', text: "1. Python SDK: User defines circuit" },
+                { id: 'node-compiler', link: 'link-comp-qir', text: "2. Compiler: Optimizes & Generates QIR" },
+                { id: 'node-qir', link: 'link-qir-api', text: "3. QIR Binary: Intermediate Representation Ready" },
+                { id: 'node-api', link: 'link-api-sched', text: "4. API Service: Receives QIR job" },
+                { id: 'node-scheduler', link: 'link-sched-res', text: "5. Scheduler: Prioritizes job" },
+                { id: 'node-resource', link: 'link-res-qec', text: "6. Resource Mgr: Allocates Qubits" },
+                { id: 'node-qec', link: 'link-qec-hal', text: "7. QEC Module: Configures Error Correction" },
+                { id: 'node-hal-int', link: null, text: "8. HAL Interface: Selects Backend" }
+            ];
+
+            // Branching Steps
+            let branchSteps = [];
+            if (selectedBackend === 'sim') {
+                commonStepsStart[commonStepsStart.length-1].link = 'link-hal-simdrv';
+                branchSteps = [
+                    { id: 'node-sim-driver', link: 'link-simdrv-sim', text: "9. Sim Driver: Translates Instructions" },
+                    { id: 'node-sim', link: 'link-sim-ret', text: "10. Simulator: Executes Simulation" },
+                    { id: 'node-sim-driver', link: 'link-simdrv-ret', text: "11. Return: Sim Results -> Driver" },
+                    { id: 'node-hal-int', link: 'link-hal-api', text: "12. Return: Driver -> HAL -> API" }
+                ];
+            } else {
+                // Real QPU via IQHalDriver
+                commonStepsStart[commonStepsStart.length-1].link = 'link-hal-iqhal';
+                branchSteps = [
+                    { id: 'node-iqhal', link: 'link-iqhal-realqp', text: "9. IQHalDriver: Compiles to Pulses" },
+                    { id: 'node-real-qp', link: 'link-realqp-ret', text: "10. Real QPU: Executes Quantum Circuit" },
+                    { id: 'node-iqhal', link: 'link-iqhal-ret', text: "11. Return: QPU Readout -> Driver" },
+                    { id: 'node-hal-int', link: 'link-hal-api', text: "12. Return: Driver -> HAL -> API" }
+                ];
+            }
+
+            // Common Steps (End)
+            const commonStepsEnd = [
+                { id: 'node-api', link: 'link-api-dash', text: "13. Return: API serves results to dashboard" },
+                { id: 'node-dashboard', link: null, text: "14. Dashboard: Visualization updated" }
+            ];
+
+            const steps = [...commonStepsStart, ...branchSteps, ...commonStepsEnd];
+
+            const currentStepIndex = Math.floor(archStep / 15) % steps.length;
+            const currentStep = steps[currentStepIndex];
+
+            // Reset all nodes and links
+            document.querySelectorAll('.arch-node').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.connection-path').forEach(el => el.classList.remove('active-flow'));
+            
+            // Activate current node
+            const currentNodeEl = document.getElementById(currentStep.id);
+            if(currentNodeEl) currentNodeEl.classList.add('active');
+            
+            // Activate current link (flow to next)
+            if (currentStep.link) {
+                const linkEl = document.getElementById(currentStep.link);
+                if (linkEl) {
+                    linkEl.classList.add('active-flow');
+                    // Color code based on direction
+                    if (currentStepIndex < 11) {
+                        linkEl.style.stroke = '#2196F3'; // Request Flow
+                    } else {
+                        linkEl.style.stroke = '#FF9800'; // Response Flow
+                    }
+                }
+            }
+
+            // Update status text
+            document.getElementById('arch-status').innerText = currentStep.text;
+
+            archStep++;
+        }
+
+        setInterval(() => {
+            simulateQueue();
+            drawNoiseCurve();
+            animateCode();
+            animateArchitecture();
+        }, 100); // 10fps animation loop
+
+        async function startKernel() {
+            await fetch(`${API_URL}/start_kernel`, { method: 'POST' });
+        }
+
+        async function startSim() {
+            await fetch(`${API_URL}/start_sim`, { method: 'POST' });
+        }
+
+        async function runSDK() {
+            await fetch(`${API_URL}/run_sdk`, { method: 'POST' });
+        }
+
+        async function stopAll() {
+            await fetch(`${API_URL}/stop_all`, { method: 'POST' });
+        }
+
+        async function updateStatus() {
+            try {
+                const res = await fetch(`${API_URL}/status`);
+                const data = await res.json();
+                
+                document.getElementById('status-kernel').innerText = `Status: ${data.kernel}`;
+                document.getElementById('status-kernel').className = `status ${data.kernel}`;
+                
+                document.getElementById('status-sim').innerText = `Status: ${data.sim}`;
+                document.getElementById('status-sim').className = `status ${data.sim}`;
+                
+                document.getElementById('status-sdk').innerText = `Status: ${data.sdk || 'stopped'}`;
+                document.getElementById('status-sdk').className = `status ${data.sdk || 'stopped'}`;
+
+                const logsRes = await fetch(`${API_URL}/logs`);
+                const logsData = await logsRes.json();
+                
+                updateLogs('logs-kernel', logsData.kernel);
+                updateLogs('logs-sim', logsData.sim);
+                updateLogs('logs-sdk', logsData.sdk);
+
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function updateLogs(elementId, logs) {
+            const el = document.getElementById(elementId);
+            el.innerText = logs.join('\n');
+            el.scrollTop = el.scrollHeight;
+        }
+
+        setInterval(updateStatus, 1000);
+        updateStatus();
+    </script>
+</body>
+</html>

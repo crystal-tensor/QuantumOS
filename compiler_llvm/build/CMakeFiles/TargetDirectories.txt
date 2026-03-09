@@ -1,0 +1,8 @@
+/Users/avalok/work/QOS/compiler_llvm/build/CMakeFiles/intrinsics_gen.dir
+/Users/avalok/work/QOS/compiler_llvm/build/CMakeFiles/vt_gen.dir
+/Users/avalok/work/QOS/compiler_llvm/build/CMakeFiles/omp_gen.dir
+/Users/avalok/work/QOS/compiler_llvm/build/CMakeFiles/acc_gen.dir
+/Users/avalok/work/QOS/compiler_llvm/build/CMakeFiles/target_parser_gen.dir
+/Users/avalok/work/QOS/compiler_llvm/build/CMakeFiles/qisa_parser.dir
+/Users/avalok/work/QOS/compiler_llvm/build/CMakeFiles/edit_cache.dir
+/Users/avalok/work/QOS/compiler_llvm/build/CMakeFiles/rebuild_cache.dir

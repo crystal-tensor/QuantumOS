@@ -1,0 +1,140 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Quantum Device Specification (DeviceSpec)",
+  "description": "Schema defining the physical properties and capabilities of a Quantum Processing Unit (QPU) for QuantumOS.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "qpu_id",
+    "qubit_count",
+    "qubits",
+    "coupling_map",
+    "gate_set"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^v\\d+\\.\\d+$",
+      "description": "Version of the DeviceSpec schema, e.g., 'v1.0'."
+    },
+    "qpu_id": {
+      "type": "string",
+      "description": "Unique identifier for the Quantum Processing Unit."
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of the device."
+    },
+    "qubit_count": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Total number of physical qubits available on the device."
+    },
+    "qubits": {
+      "type": "array",
+      "description": "List of physical properties for each qubit, indexed by qubit ID (0 to qubit_count-1).",
+      "items": {
+        "type": "object",
+        "required": ["id", "t1_us", "t2_us", "frequency_ghz", "readout_fidelity"],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Physical qubit index."
+          },
+          "t1_us": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Relaxation time (T1) in microseconds."
+          },
+          "t2_us": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Dephasing time (T2) in microseconds."
+          },
+          "frequency_ghz": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Qubit resonance frequency in GHz."
+          },
+          "readout_fidelity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Fidelity of single-shot readout (0.0 to 1.0)."
+          }
+        }
+      }
+    },
+    "coupling_map": {
+      "type": "array",
+      "description": "Undirected graph representing qubit connectivity. Each pair [q1, q2] implies a physical connection allowing 2-qubit gates.",
+      "items": {
+        "type": "array",
+        "minItems": 2,
+        "maxItems": 2,
+        "items": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "gate_set": {
+      "type": "object",
+      "description": "Supported quantum gates and their performance metrics.",
+      "required": ["single_qubit", "two_qubit"],
+      "properties": {
+        "single_qubit": {
+          "type": "array",
+          "description": "List of supported single-qubit gates (e.g., U3, X, H).",
+          "items": {
+            "type": "object",
+            "required": ["name", "duration_ns", "avg_fidelity"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "enum": ["U3", "X", "Y", "Z", "H", "S", "T", "RX", "RY", "RZ"]
+              },
+              "duration_ns": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Gate execution time in nanoseconds."
+              },
+              "avg_fidelity": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Average gate fidelity."
+              }
+            }
+          }
+        },
+        "two_qubit": {
+          "type": "array",
+          "description": "List of supported two-qubit gates (e.g., CX, CZ).",
+          "items": {
+            "type": "object",
+            "required": ["name", "duration_ns", "avg_fidelity"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "enum": ["CX", "CZ", "SWAP", "ISWAP"]
+              },
+              "duration_ns": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Gate execution time in nanoseconds."
+              },
+              "avg_fidelity": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Average gate fidelity."
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
